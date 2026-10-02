@@ -1,0 +1,19 @@
+# 가상환경 / 캐시
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+
+# 환경 변수 (예시 파일만 커밋)
+.env
+
+# 로컬 서버 로그
+*.log
+
+# 에디터
+.DS_Store
+.idea/
+
+# 작업용 스크래치
+.superpowers/
