@@ -57,9 +57,10 @@ app/
 
 ```
 app/main.py              app.include_router(posts_router) 로 등록된 라우트 매칭
- → app/posts/schemas.py  PostUpdate 검증 (실패 시 여기서 422, 아래는 실행 안 됨)
- → app/core/database.py  get_db(): 세션 열기 (yield 앞)
+ → app/core/database.py  get_db(): 세션 열기 (yield 앞)          ← 의존성을 먼저 푼다
  → app/posts/router.py   get_post_service(db) → PostService(db)
+ → app/posts/schemas.py  경로/쿼리/바디 검증 (PostUpdate)
+                         실패하면 422 응답. 엔드포인트는 실행되지 않지만 get_db의 열기/닫기는 실행된다
  → app/posts/router.py   update_post(post_id, payload, service)
  → app/posts/service.py  update(): get() → repository.find_by_id()
                          없으면 PostNotFoundError → core/exceptions.py 핸들러 → 404
@@ -67,6 +68,9 @@ app/main.py              app.include_router(posts_router) 로 등록된 라우�
  → app/posts/router.py   반환한 Post를 response_model(PostResponse)로 직렬화
  → app/core/database.py  get_db(): 세션 닫기 (yield 뒤)
 ```
+
+**주의:** FastAPI는 의존성(`Depends`)을 먼저 실행하고 그다음에 요청 값을 검증한다. 그래서 422로 끝나는 요청에서도
+`get_db()`에 걸어 둔 브레이크포인트에서는 멈춘다. "엔드포인트 함수에서 안 멈추는데 `get_db`에서는 멈춘다"면 검증 실패를 의심한다.
 
 AI가 만든 FastAPI 코드를 처음 열면 **`main.py`의 `include_router` → 해당 `router.py` → 엔드포인트가 쓰는 `Depends`** 순서로 따라가면 된다.
 

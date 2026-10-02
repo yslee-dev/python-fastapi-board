@@ -110,11 +110,22 @@ async def test_list_posts_page_beyond_last_returns_empty_items(client):
     assert body["total"] == 1
 
 
-@pytest.mark.parametrize("params", [{"page": 0}, {"size": 0}, {"size": 101}])
+@pytest.mark.parametrize("params", [{"page": 0}, {"page": 1_000_001}, {"size": 0}, {"size": 101}])
 async def test_list_posts_rejects_invalid_paging(client, params):
     response = await client.get("/posts", params=params)
 
     assert response.status_code == 422
+
+
+@pytest.mark.parametrize("method", ["get", "patch", "delete"])
+async def test_post_id_out_of_db_int_range_is_rejected(client, method):
+    # DB의 integer(int4) 범위를 넘는 id는 DB까지 가기 전에 422로 막는다 (500 방지)
+    kwargs = {"json": {"title": "x"}} if method == "patch" else {}
+
+    response = await getattr(client, method)("/posts/9999999999", **kwargs)
+
+    assert response.status_code == 422
+    assert response.json()["detail"][0]["loc"] == ["path", "post_id"]
 
 
 # --- 수정 ---

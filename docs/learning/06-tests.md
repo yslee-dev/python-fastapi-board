@@ -20,8 +20,11 @@ uv run pytest -v
 
 - **`scope="session"`** — `engine` 픽스처는 pytest 실행 전체에서 한 번만 만들어진다. 기본값은 `function`(테스트마다).
 - **픽스처의 `yield`** — 01단계 `get_session_like`와 같다. `yield` 앞은 준비, 뒤는 정리다.
-- **`join_transaction_mode="create_savepoint"`** — 서비스가 `commit()`을 불러도 진짜 커밋이 아니라 SAVEPOINT만 확정된다.
-  그래서 테스트가 끝나면 바깥 트랜잭션을 통째로 롤백할 수 있다.
+- **바깥 트랜잭션 롤백** — 세션이 이미 트랜잭션이 열린 커넥션에 붙어 있으면, 서비스가 `commit()`을 불러도
+  바깥 트랜잭션은 커밋되지 않는다 (세션이 그 트랜잭션의 주인이 아니기 때문). 그래서 테스트가 끝나면 통째로 롤백할 수 있다.
+- **`join_transaction_mode="create_savepoint"`** — 세션의 작업을 항상 SAVEPOINT 안에서 한다.
+  차이는 **`rollback()`**에서 드러난다. 이 설정이 있으면 `rollback()`은 마지막 `commit()` 이후의 변경만 되돌린다 (실제 DB와 같다).
+  없으면 `rollback()`이 바깥 트랜잭션까지 통째로 되돌려서, **이미 `commit()`한 데이터까지 사라진다** — 실제 서버와 다르게 동작하는 테스트가 된다.
 - **`app.dependency_overrides[get_db] = lambda: db_session`** — 앱이 `get_db()`를 부를 자리에 테스트 세션을 넣는다.
 - **`tests/test_post_repository.py`** — HTTP를 거치지 않고 repository를 직접 테스트한다.
   같은 트랜잭션 안에서는 `now()`가 같은 값이므로, 정렬에 `id` 보조 기준이 꼭 필요하다는 것도 이 테스트가 증명한다.
@@ -78,11 +81,28 @@ TEARDOWN S engine                                  ← 마지막에 테이블 �
 ## 직접 해볼 것
 
 1. `uv run pytest --setup-show tests/test_post_repository.py`로 픽스처 생성/정리 순서를 관찰한다.
-2. `conftest.py`에서 `join_transaction_mode="create_savepoint",` 줄을 지우고 `uv run pytest -q`를 **두 번** 실행한다.
-   무엇이 깨지는지, 왜 그런지 생각해 본다. (힌트: 서비스의 `commit()`이 바깥 트랜잭션을 진짜로 커밋해 버린다)
-   끝나면 원복하고 테스트 DB를 정리한다.
+2. `create_savepoint`의 효과를 직접 확인한다. 아래 임시 테스트를 `tests/test_tmp_probe.py`로 만들고 실행한다.
+
+   ```python
+   from app.posts.models import Post
+   from app.posts.repository import PostRepository
+
+
+   def test_probe(db_session):
+       repo = PostRepository(db_session)
+       repo.save(Post(title="a", content="c", author="x"))
+       db_session.commit()      # 서비스가 커밋했다고 치고
+       repo.save(Post(title="b", content="c", author="x"))
+       db_session.rollback()    # 이후 작업이 실패해서 롤백
+       print("남은 글:", repo.count())
+   ```
 
    ```bash
-   git checkout -- tests/
-   docker compose exec db psql -U board -d board_test -c 'drop table if exists posts'
+   uv run pytest -s tests/test_tmp_probe.py      # 남은 글: 1  ← 커밋한 a는 남는다 (실제 DB와 같음)
    ```
+
+   이제 `conftest.py`에서 `join_transaction_mode="create_savepoint",` 줄을 지우고 다시 실행하면 `남은 글: 0`이 나온다.
+   롤백이 바깥 트랜잭션까지 되돌려 **커밋한 a까지 사라진 것**이다. 반면 `uv run pytest -q`로 기존 테스트를 돌리면 모두 통과한다 —
+   지금 서비스 코드는 `rollback()`을 직접 부르지 않기 때문이다. "테스트 격리 설정은 평소엔 티가 안 나다가 특정 코드 경로에서만 다르게 동작한다"는 점을 기억하자.
+   (08단계 이후 코드에서 해 본다면 함수를 `async def`로, 세션 호출에 `await`를 붙인다.)
+   끝나면 `git checkout -- tests/ && rm tests/test_tmp_probe.py`로 되돌린다.

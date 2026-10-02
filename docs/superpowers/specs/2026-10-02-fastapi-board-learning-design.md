@@ -69,8 +69,8 @@
 | Method | Path | 설명 | 성공 | 실패 |
 |---|---|---|---|---|
 | POST | `/posts` | 생성 | 201 + PostResponse | 422 |
-| GET | `/posts?page=1&size=10` | 목록, 최신순 | 200 + PostListResponse | 422 (page < 1, size가 1~100 범위 밖) |
-| GET | `/posts/{post_id}` | 단건 조회 | 200 + PostResponse | 404 |
+| GET | `/posts?page=1&size=10` | 목록, 최신순 | 200 + PostListResponse | 422 (page가 1~1,000,000 범위 밖, size가 1~100 범위 밖) |
+| GET | `/posts/{post_id}` | 단건 조회 | 200 + PostResponse | 404, 422 (id가 DB int 범위 밖) |
 | PATCH | `/posts/{post_id}` | 부분 수정 (`title`, `content`만 가능) | 200 + PostResponse | 404, 422 |
 | DELETE | `/posts/{post_id}` | 삭제 | 204 | 404 |
 | GET | `/health` | 헬스 체크 | 200 `{"status": "ok"}` | - |
@@ -151,8 +151,9 @@ python-fastapi/
 
 ```
 HTTP 요청
- → router.py      경로 매칭, Pydantic으로 Body/Query 검증 (실패 시 422 자동 응답)
- → Depends(get_db) 세션 열기 (get_db의 yield 앞부분)
+ → router.py      경로 매칭
+ → Depends(get_db) 세션 열기 (get_db의 yield 앞부분) — 의존성이 검증보다 먼저 실행된다
+ → Pydantic으로 Path/Body/Query 검증 (실패 시 422 자동 응답, 엔드포인트는 실행되지 않음)
  → service.py     비즈니스 로직, 대상이 없으면 PostNotFoundError 발생
  → repository.py  SQLAlchemy 2.0 select() 쿼리
  → service.py     변경 작업이면 session.commit()
@@ -173,7 +174,7 @@ HTTP 요청
 
 - `docker/init.sql`로 같은 PostgreSQL 컨테이너 안에 테스트 전용 DB `board_test`를 만든다.
 - 테스트 세션 시작 시 `Base.metadata.create_all()`로 테이블을 만들고, 끝나면 `drop_all()` 한다.
-- 테스트마다 커넥션 단위 트랜잭션을 열고 끝나면 롤백해서 격리한다. 이때 service의 `commit()`이 바깥 트랜잭션을 확정하지 않도록 SAVEPOINT 방식(`join_transaction_mode="create_savepoint"`)을 쓴다.
+- 테스트마다 커넥션 단위 트랜잭션을 열고 끝나면 롤백해서 격리한다. 세션이 바깥 트랜잭션의 주인이 아니므로 service의 `commit()`은 바깥 트랜잭션을 확정하지 않는다. 또한 `rollback()`이 마지막 commit 이후만 되돌리도록(실제 DB와 같도록) SAVEPOINT 방식(`join_transaction_mode="create_savepoint"`)을 쓴다.
 - `app.dependency_overrides[get_db]`로 테스트 세션을 주입한다.
 - 다룰 케이스: 생성 성공, 생성 검증 실패(422), 목록 페이지네이션, 단건 조회 성공/404, 부분 수정(보내지 않은 필드 유지)/404, 삭제 성공/404.
 - 08단계 async 전환 후에도 같은 시나리오가 모두 통과해야 한다.

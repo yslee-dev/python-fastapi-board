@@ -18,7 +18,7 @@ git diff step-06 step-07
 - **`app/posts/service.py`** — 생성/수정/삭제 시 INFO 로그를 남긴다.
 
 ```
-2026-10-02 15:30:12,583 INFO  [app.posts.service] service.py:34 - 게시글 생성 id=2
+2026-10-02 15:30:12,583 INFO  [app.posts.service] service.py:35 - 게시글 생성 id=2
                               ^ 로거 이름         ^ 파일:줄     ^ 메시지
 ```
 

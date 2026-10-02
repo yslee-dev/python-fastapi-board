@@ -36,7 +36,9 @@ DB를 부르는 함수를 async로 바꾸면 **호출하는 쪽도 줄줄이 asy
 
 - `expire_on_commit=False`가 사실상 필수다. 동기 세션은 만료된 속성에 접근하면 알아서 SELECT를 다시 하지만,
   async 세션은 그런 **암묵적 IO를 할 수 없다.** 대신 `MissingGreenlet` 에러가 난다.
-- 그래서 `tests/test_post_repository.py`에서는 `db_session.expire_all()`로 만료시킨 뒤 `find_page`의 SELECT로 **명시적으로** 다시 읽는다.
+- `tests/test_post_repository.py`의 `db_session.expire_all()`은 "만료시킨 뒤 SELECT로 **명시적으로** 다시 읽는" 예시다.
+  지금은 PostgreSQL이 INSERT 때 `RETURNING`으로 `created_at`을 바로 돌려줘서 이 줄이 없어도 통과한다.
+  하지만 다른 트랜잭션이 바꾼 값을 다시 읽어야 할 때처럼 속성이 만료된 상황에서는, async에서는 이렇게 명시적으로 다시 읽어야 한다.
 - SQLAlchemy 2.1부터는 async를 쓰려면 `sqlalchemy[asyncio]`로 설치해야 한다 (`greenlet` 포함). 빠뜨리면
   `ImportError: The SQLAlchemy asyncio module requires that the Python 'greenlet' library is installed.`
 

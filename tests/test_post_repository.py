@@ -21,7 +21,9 @@ async def test_find_page_orders_newest_first_even_with_same_created_at(db_sessio
     repository = PostRepository(db_session)
     for title in ["t0", "t1", "t2"]:
         await repository.save(make_post(title))
-    db_session.expire_all()  # server_default로 채워진 created_at을 다시 읽게 한다
+    # 만료시킨 뒤 find_page의 SELECT로 명시적으로 다시 읽는 예시
+    # (async 세션은 만료된 속성을 암묵적으로 다시 읽지 못한다)
+    db_session.expire_all()
 
     posts = await repository.find_page(offset=0, limit=10)
 

@@ -12,7 +12,7 @@ git diff step-02 step-03         # 단계 사이의 변화 보기
 git checkout step-03             # 특정 단계로 이동 (돌아올 땐 git checkout main)
 ```
 
-단계별 학습 노트는 `docs/learning/`에 있습니다.
+단계별 학습 노트는 `docs/learning/`에 있습니다. 노트는 단계 태그 이후에도 보완될 수 있으니 **`main`의 노트를 기준으로** 읽어 주세요.
 
 ## 준비물
 
