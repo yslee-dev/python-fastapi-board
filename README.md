@@ -27,4 +27,5 @@ uv sync                  # 의존성 설치 (= ./gradlew dependencies)
 uv run pytest            # 테스트 (= ./gradlew test)
 uv run ruff check .      # 린트
 uv run ruff format .     # 포맷
+uv run fastapi dev app/main.py   # 개발 서버 (자동 재시작) → http://localhost:8000/docs
 ```
