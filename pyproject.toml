@@ -9,7 +9,7 @@ dependencies = [
     "fastapi[standard]>=0.142.2",
     "psycopg[binary]>=3.3.6",
     "pydantic-settings>=2.15.0",
-    "sqlalchemy>=2.1.2",
+    "sqlalchemy[asyncio]>=2.1.2",
 ]
 
 [tool.ruff]
@@ -23,10 +23,13 @@ select = ["E", "F", "I", "UP", "B"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 
 [dependency-groups]
 dev = [
     "httpx2>=2.13.1",
     "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
     "ruff>=0.16.10",
 ]

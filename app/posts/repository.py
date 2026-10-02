@@ -1,37 +1,37 @@
-"""게시글 DB 접근. Spring Data의 Repository에 해당한다.
+"""게시글 DB 접근 (async 버전).
 
-쿼리만 담당하고 commit은 하지 않는다. 트랜잭션 경계는 서비스가 정한다.
+DB와 통신하는 메서드는 모두 await가 필요하다. session.add()는 메모리 작업이라 동기다.
 """
 
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.posts.models import Post
 
 
 class PostRepository:
-    def __init__(self, session: Session) -> None:
+    def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
-    def save(self, post: Post) -> Post:
+    async def save(self, post: Post) -> Post:
         self.session.add(post)
-        self.session.flush()  # INSERT를 지금 보내서 id를 받는다 (commit은 아님)
+        await self.session.flush()  # INSERT를 지금 보내서 id를 받는다 (commit은 아님)
         return post
 
-    def find_by_id(self, post_id: int) -> Post | None:
-        return self.session.get(Post, post_id)
+    async def find_by_id(self, post_id: int) -> Post | None:
+        return await self.session.get(Post, post_id)
 
-    def find_page(self, offset: int, limit: int) -> list[Post]:
+    async def find_page(self, offset: int, limit: int) -> list[Post]:
         stmt = (
             select(Post)
             .order_by(Post.created_at.desc(), Post.id.desc())  # 같은 시각이면 id로 결정
             .offset(offset)
             .limit(limit)
         )
-        return list(self.session.scalars(stmt))
+        return list(await self.session.scalars(stmt))
 
-    def count(self) -> int:
-        return self.session.scalar(select(func.count()).select_from(Post)) or 0
+    async def count(self) -> int:
+        return await self.session.scalar(select(func.count()).select_from(Post)) or 0
 
-    def delete(self, post: Post) -> None:
-        self.session.delete(post)
+    async def delete(self, post: Post) -> None:
+        await self.session.delete(post)

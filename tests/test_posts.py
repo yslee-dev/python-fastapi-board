@@ -1,10 +1,10 @@
 import pytest
-from fastapi.testclient import TestClient
+from httpx import AsyncClient
 
 
-def create_post(client: TestClient, **overrides: str) -> dict:
+async def create_post(client: AsyncClient, **overrides: str) -> dict:
     payload = {"title": "제목", "content": "내용", "author": "홍길동"} | overrides
-    response = client.post("/posts", json=payload)
+    response = await client.post("/posts", json=payload)
     assert response.status_code == 201, response.text
     return response.json()
 
@@ -12,8 +12,10 @@ def create_post(client: TestClient, **overrides: str) -> dict:
 # --- 생성 ---
 
 
-def test_create_post(client):
-    response = client.post("/posts", json={"title": "첫 글", "content": "안녕", "author": "홍길동"})
+async def test_create_post(client):
+    response = await client.post(
+        "/posts", json={"title": "첫 글", "content": "안녕", "author": "홍길동"}
+    )
 
     assert response.status_code == 201
     body = response.json()
@@ -25,8 +27,8 @@ def test_create_post(client):
     assert body["updated_at"]
 
 
-def test_create_post_rejects_too_long_title(client):
-    response = client.post("/posts", json={"title": "a" * 101, "content": "c", "author": "a"})
+async def test_create_post_rejects_too_long_title(client):
+    response = await client.post("/posts", json={"title": "a" * 101, "content": "c", "author": "a"})
 
     assert response.status_code == 422
     error = response.json()["detail"][0]
@@ -34,15 +36,15 @@ def test_create_post_rejects_too_long_title(client):
     assert error["type"] == "string_too_long"
 
 
-def test_create_post_rejects_blank_title(client):
-    response = client.post("/posts", json={"title": "   ", "content": "c", "author": "a"})
+async def test_create_post_rejects_blank_title(client):
+    response = await client.post("/posts", json={"title": "   ", "content": "c", "author": "a"})
 
     assert response.status_code == 422
     assert response.json()["detail"][0]["loc"] == ["body", "title"]
 
 
-def test_create_post_requires_author(client):
-    response = client.post("/posts", json={"title": "t", "content": "c"})
+async def test_create_post_requires_author(client):
+    response = await client.post("/posts", json={"title": "t", "content": "c"})
 
     assert response.status_code == 422
     error = response.json()["detail"][0]
@@ -53,24 +55,24 @@ def test_create_post_requires_author(client):
 # --- 조회 ---
 
 
-def test_get_post(client):
-    created = create_post(client)
+async def test_get_post(client):
+    created = await create_post(client)
 
-    response = client.get(f"/posts/{created['id']}")
+    response = await client.get(f"/posts/{created['id']}")
 
     assert response.status_code == 200
     assert response.json() == created
 
 
-def test_get_post_not_found(client):
-    response = client.get("/posts/999")
+async def test_get_post_not_found(client):
+    response = await client.get("/posts/999")
 
     assert response.status_code == 404
     assert response.json() == {"detail": "Post 999 not found"}
 
 
-def test_get_post_with_non_integer_id(client):
-    response = client.get("/posts/abc")
+async def test_get_post_with_non_integer_id(client):
+    response = await client.get("/posts/abc")
 
     assert response.status_code == 422
     assert response.json()["detail"][0]["loc"] == ["path", "post_id"]
@@ -79,12 +81,12 @@ def test_get_post_with_non_integer_id(client):
 # --- 목록 ---
 
 
-def test_list_posts_newest_first_with_pagination(client):
+async def test_list_posts_newest_first_with_pagination(client):
     for title in ["1", "2", "3"]:
-        create_post(client, title=title)
+        await create_post(client, title=title)
 
-    first_page = client.get("/posts", params={"page": 1, "size": 2}).json()
-    second_page = client.get("/posts", params={"page": 2, "size": 2}).json()
+    first_page = (await client.get("/posts", params={"page": 1, "size": 2})).json()
+    second_page = (await client.get("/posts", params={"page": 2, "size": 2})).json()
 
     assert [p["title"] for p in first_page["items"]] == ["3", "2"]
     assert first_page["total"] == 3
@@ -93,24 +95,24 @@ def test_list_posts_newest_first_with_pagination(client):
     assert [p["title"] for p in second_page["items"]] == ["1"]
 
 
-def test_list_posts_uses_default_paging(client):
-    body = client.get("/posts").json()
+async def test_list_posts_uses_default_paging(client):
+    body = (await client.get("/posts")).json()
 
     assert body == {"items": [], "total": 0, "page": 1, "size": 10}
 
 
-def test_list_posts_page_beyond_last_returns_empty_items(client):
-    create_post(client)
+async def test_list_posts_page_beyond_last_returns_empty_items(client):
+    await create_post(client)
 
-    body = client.get("/posts", params={"page": 5}).json()
+    body = (await client.get("/posts", params={"page": 5})).json()
 
     assert body["items"] == []
     assert body["total"] == 1
 
 
 @pytest.mark.parametrize("params", [{"page": 0}, {"size": 0}, {"size": 101}])
-def test_list_posts_rejects_invalid_paging(client, params):
-    response = client.get("/posts", params=params)
+async def test_list_posts_rejects_invalid_paging(client, params):
+    response = await client.get("/posts", params=params)
 
     assert response.status_code == 422
 
@@ -118,10 +120,10 @@ def test_list_posts_rejects_invalid_paging(client, params):
 # --- 수정 ---
 
 
-def test_update_post_partially(client):
-    created = create_post(client, title="원래 제목", content="원래 내용")
+async def test_update_post_partially(client):
+    created = await create_post(client, title="원래 제목", content="원래 내용")
 
-    response = client.patch(f"/posts/{created['id']}", json={"title": "새 제목"})
+    response = await client.patch(f"/posts/{created['id']}", json={"title": "새 제목"})
 
     assert response.status_code == 200
     body = response.json()
@@ -130,26 +132,26 @@ def test_update_post_partially(client):
     assert body["author"] == "홍길동"
 
 
-def test_update_post_rejects_explicit_null(client):
-    created = create_post(client)
+async def test_update_post_rejects_explicit_null(client):
+    created = await create_post(client)
 
-    response = client.patch(f"/posts/{created['id']}", json={"title": None})
+    response = await client.patch(f"/posts/{created['id']}", json={"title": None})
 
     assert response.status_code == 422
     assert response.json()["detail"][0]["loc"] == ["body", "title"]
 
 
-def test_update_post_ignores_author(client):
-    created = create_post(client, author="홍길동")
+async def test_update_post_ignores_author(client):
+    created = await create_post(client, author="홍길동")
 
-    response = client.patch(f"/posts/{created['id']}", json={"author": "임꺽정"})
+    response = await client.patch(f"/posts/{created['id']}", json={"author": "임꺽정"})
 
     assert response.status_code == 200
     assert response.json()["author"] == "홍길동"
 
 
-def test_update_post_not_found(client):
-    response = client.patch("/posts/999", json={"title": "새 제목"})
+async def test_update_post_not_found(client):
+    response = await client.patch("/posts/999", json={"title": "새 제목"})
 
     assert response.status_code == 404
     assert response.json() == {"detail": "Post 999 not found"}
@@ -158,18 +160,18 @@ def test_update_post_not_found(client):
 # --- 삭제 ---
 
 
-def test_delete_post(client):
-    created = create_post(client)
+async def test_delete_post(client):
+    created = await create_post(client)
 
-    response = client.delete(f"/posts/{created['id']}")
+    response = await client.delete(f"/posts/{created['id']}")
 
     assert response.status_code == 204
     assert response.content == b""
-    assert client.get(f"/posts/{created['id']}").status_code == 404
+    assert (await client.get(f"/posts/{created['id']}")).status_code == 404
 
 
-def test_delete_post_not_found(client):
-    response = client.delete("/posts/999")
+async def test_delete_post_not_found(client):
+    response = await client.delete("/posts/999")
 
     assert response.status_code == 404
     assert response.json() == {"detail": "Post 999 not found"}
@@ -178,8 +180,8 @@ def test_delete_post_not_found(client):
 # --- 로깅 ---
 
 
-def test_create_post_writes_info_log(client, caplog):
+async def test_create_post_writes_info_log(client, caplog):
     with caplog.at_level("INFO", logger="app.posts.service"):
-        created = create_post(client)
+        created = await create_post(client)
 
     assert f"게시글 생성 id={created['id']}" in caplog.text
