@@ -41,7 +41,7 @@
 | 웹 프레임워크 | FastAPI + Uvicorn | Spring MVC + 내장 Tomcat |
 | 검증/DTO | Pydantic v2 | Bean Validation + DTO |
 | ORM | SQLAlchemy 2.0 (07단계까지 동기, 08단계에서 async) | JPA/Hibernate |
-| DB 드라이버 | psycopg 3 (08단계에서 asyncpg 추가) | JDBC 드라이버 |
+| DB 드라이버 | psycopg 3 (동기/비동기 모두 지원, 08단계에서 async 모드 사용) | JDBC 드라이버 |
 | 마이그레이션 | Alembic | Flyway/Liquibase |
 | DB | PostgreSQL 16 (docker compose, 호스트 포트 5433) | 동일 |
 | 설정 | pydantic-settings + `.env` | `application.yml` + `@ConfigurationProperties` |
@@ -124,12 +124,12 @@ python-fastapi/
 | `step-00` | setup | uv 프로젝트, Python 3.12 고정, ruff, pytest, `.gitignore`, VS Code 기본 설정 | 가상환경, `pyproject.toml`, `uv run`, `uv add` |
 | `step-01` | basics | `basics/` 예제 모듈과 pytest 테스트 | 타입 힌트, list/dict comprehension, `None`과 truthy/falsy, 클래스와 `@dataclass`, 예외, 데코레이터, 컨텍스트 매니저(`with`), 제너레이터(`yield`) |
 | `step-02` | hello | FastAPI 앱, `/health`, Swagger UI | 데코레이터 기반 라우팅, Uvicorn 실행, `/docs` 자동 문서 |
-| `step-03` | memory-crud | dict 저장소로 Post CRUD 전체 구현 (한 파일 안에서) | Pydantic 모델, path/query 파라미터, `HTTPException`, 422 응답 읽는 법 |
-| `step-04` | database | docker compose PostgreSQL, SQLAlchemy 모델, Alembic 첫 마이그레이션, 저장소를 DB로 교체 | `Depends(get_db)` + `yield`를 이용한 세션 수명 관리, ORM 객체 → Pydantic 변환(`from_attributes`) |
+| `step-03` | memory-crud | dict 저장소로 Post CRUD 전체 구현 (한 파일 안에서) + API 테스트 | Pydantic 모델, path/query 파라미터, `HTTPException`, 422 응답 읽는 법 |
+| `step-04` | database | docker compose PostgreSQL, SQLAlchemy 모델, Alembic 첫 마이그레이션, 저장소를 DB로 교체, 테스트에 최소 DB 픽스처 추가 | `Depends(get_db)` + `yield`를 이용한 세션 수명 관리, ORM 객체 → Pydantic 변환(`from_attributes`) |
 | `step-05` | layers | `app/posts/` 패키지로 router/service/repository 분리, 전역 예외 핸들러, pydantic-settings 설정 | 의존성 주입 체인, 커스텀 예외 → 404 매핑, 설정 주입 |
-| `step-06` | tests | `conftest.py` 픽스처, 테스트 DB, API 테스트 | 픽스처와 `yield`, `dependency_overrides`, 트랜잭션 롤백 격리 |
+| `step-06` | tests | 04단계의 최소 픽스처를 `conftest.py`로 옮기고 SAVEPOINT 롤백 격리로 고도화, repository 테스트 추가 | 픽스처와 `yield`, `dependency_overrides`, 트랜잭션 롤백 격리 |
 | `step-07` | debugging | `.vscode/launch.json`, 로깅 설정, 버그 실습 문서 | 트레이스백 읽기, 브레이크포인트, `breakpoint()`, 흔한 AI 코드 버그 패턴 |
-| `step-08` | async | `async def` + `AsyncSession` + asyncpg로 전환, 테스트도 async로 전환 | async/await가 실제로 바꾸는 것, 이벤트 루프 블로킹 같은 흔한 실수 |
+| `step-08` | async | `async def` + `AsyncSession` + psycopg async 모드로 전환 (asyncpg와의 차이는 학습 노트에서 설명), 테스트도 async로 전환 | async/await가 실제로 바꾸는 것, 이벤트 루프 블로킹 같은 흔한 실수 |
 
 ### 01 basics 세부 사항
 - `basics/` 아래에 주제별 모듈을 둔다. 예: `type_hints.py`, `collections_demo.py`, `decorators.py`, …
@@ -189,6 +189,8 @@ HTTP 요청
 - 접속 정보는 `.env`로 관리하고, `.env.example`만 커밋한다.
 
 ## 11. 완료 기준
+
+- API 테스트는 03단계에서 처음 작성하고, 05단계 레이어 분리 때는 테스트를 바꾸지 않는다 (리팩터링 안전망).
 
 - 단계마다 `uv run pytest`와 `ruff check`가 통과한 상태로 커밋하고 태그를 붙인다. 00단계는 테스트가 없으므로 `ruff check`와 `uv run python --version`(3.12 확인)만 검증한다. 02, 03단계는 그 시점에 있는 테스트를 기준으로 한다.
 - 04단계 이후 단계는 docker compose DB에 연결해 Swagger UI 또는 curl로 CRUD 전체가 동작하는지 확인한다.
