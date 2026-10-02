@@ -1,4 +1,3 @@
-import os
 from collections.abc import Iterator
 
 import pytest
@@ -6,13 +5,11 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.database import Base, get_db
+from app.core.config import settings
+from app.core.database import Base, get_db
 from app.main import app
 
-TEST_DATABASE_URL = os.getenv(
-    "TEST_DATABASE_URL", "postgresql+psycopg://board:board@localhost:5433/board_test"
-)
-test_engine = create_engine(TEST_DATABASE_URL)
+test_engine = create_engine(settings.test_database_url)
 TestingSessionLocal = sessionmaker(bind=test_engine, autoflush=False, expire_on_commit=False)
 
 

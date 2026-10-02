@@ -1,11 +1,11 @@
-"""ORM 모델. JPA의 @Entity에 해당한다."""
+"""게시글 ORM 모델. JPA의 @Entity에 해당한다."""
 
 from datetime import datetime
 
 from sqlalchemy import DateTime, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.database import Base
+from app.core.database import Base
 
 
 class Post(Base):

@@ -5,12 +5,13 @@ from logging.config import fileConfig
 from sqlalchemy import engine_from_config, pool
 
 from alembic import context
-from app import models  # noqa: F401  모델을 import해야 Base.metadata에 테이블이 등록된다
-from app.database import DATABASE_URL, Base
+from app.core.config import settings
+from app.core.database import Base
+from app.posts import models  # noqa: F401  모델을 import해야 Base.metadata에 테이블이 등록된다
 
 config = context.config
 # alembic.ini 대신 앱과 같은 DB URL을 쓴다
-config.set_main_option("sqlalchemy.url", DATABASE_URL)
+config.set_main_option("sqlalchemy.url", settings.database_url)
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
