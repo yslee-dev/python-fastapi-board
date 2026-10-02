@@ -173,3 +173,13 @@ def test_delete_post_not_found(client):
 
     assert response.status_code == 404
     assert response.json() == {"detail": "Post 999 not found"}
+
+
+# --- 로깅 ---
+
+
+def test_create_post_writes_info_log(client, caplog):
+    with caplog.at_level("INFO", logger="app.posts.service"):
+        created = create_post(client)
+
+    assert f"게시글 생성 id={created['id']}" in caplog.text
