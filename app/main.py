@@ -1,16 +1,23 @@
-"""03단계: 메모리(dict) 저장소로 만든 게시글 CRUD.
+"""04단계: PostgreSQL에 저장하는 게시글 CRUD.
 
-모든 코드를 한 파일에 두어 '요청 → 검증 → 처리 → 응답' 흐름을 한눈에 본다.
-05단계에서 router / service / repository로 나눈다.
+03단계와 비교해서 저장소만 dict → DB로 바뀌었다. 스키마와 API 계약은 그대로다.
 """
 
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Annotated
 
-from fastapi import FastAPI, HTTPException, Query, status
+from fastapi import Depends, FastAPI, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
+
+from app.database import get_db
+from app.models import Post
 
 app = FastAPI(title="Board API")
+
+# 매번 `db: Session = Depends(get_db)`라고 쓰는 대신 별칭을 만든다
+DbSession = Annotated[Session, Depends(get_db)]
 
 
 # --- 스키마 (DTO) ---
@@ -44,6 +51,9 @@ class PostUpdate(BaseModel):
 
 
 class PostResponse(BaseModel):
+    # from_attributes: dict가 아닌 ORM 객체의 속성(post.title)에서 값을 읽을 수 있게 한다
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     title: str
     content: str
@@ -59,16 +69,12 @@ class PostListResponse(BaseModel):
     size: int
 
 
-# --- 저장소 (메모리) ---
-
-_posts: dict[int, PostResponse] = {}
-_next_id = 1
+# --- 헬퍼 ---
 
 
-def _find_or_404(post_id: int) -> PostResponse:
-    post = _posts.get(post_id)
+def _find_or_404(db: Session, post_id: int) -> Post:
+    post = db.get(Post, post_id)  # PK 조회 (em.find)
     if post is None:
-        # HTTPException을 던지면 FastAPI가 {"detail": ...} 응답으로 바꿔준다
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail=f"Post {post_id} not found"
         )
@@ -83,47 +89,55 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@app.post("/posts", status_code=status.HTTP_201_CREATED)
-def create_post(payload: PostCreate) -> PostResponse:
-    # payload: 요청 JSON이 PostCreate로 검증·변환된 객체 (@RequestBody @Valid)
-    global _next_id  # 모듈 변수를 '재할당'하려면 필요하다. 없으면 UnboundLocalError
-    now = datetime.now(UTC)
-    post = PostResponse(id=_next_id, **payload.model_dump(), created_at=now, updated_at=now)
-    _posts[post.id] = post
-    _next_id += 1
+@app.post("/posts", response_model=PostResponse, status_code=status.HTTP_201_CREATED)
+def create_post(payload: PostCreate, db: DbSession) -> Post:
+    # response_model을 지정하면 반환한 ORM 객체를 PostResponse 모양으로 직렬화한다
+    post = Post(**payload.model_dump())
+    db.add(post)  # em.persist
+    db.commit()  # @Transactional이 없으므로 직접 커밋해야 저장된다
+    db.refresh(post)  # DB가 채운 id, created_at을 다시 읽어온다
     return post
 
 
-@app.get("/posts")
+@app.get("/posts", response_model=PostListResponse)
 def list_posts(
+    db: DbSession,
     page: Annotated[int, Query(ge=1)] = 1,
     size: Annotated[int, Query(ge=1, le=100)] = 10,
 ) -> PostListResponse:
-    # 경로에 없는 단순 타입 인자는 쿼리 파라미터가 된다 (@RequestParam)
-    ordered = sorted(_posts.values(), key=lambda p: p.id, reverse=True)
-    start = (page - 1) * size
+    stmt = (
+        select(Post)
+        .order_by(Post.created_at.desc(), Post.id.desc())  # 같은 시각이면 id로 결정
+        .offset((page - 1) * size)
+        .limit(size)
+    )
+    posts = db.scalars(stmt).all()
+    total = db.scalar(select(func.count()).select_from(Post)) or 0
     return PostListResponse(
-        items=ordered[start : start + size], total=len(ordered), page=page, size=size
+        items=[PostResponse.model_validate(post) for post in posts],
+        total=total,
+        page=page,
+        size=size,
     )
 
 
-@app.get("/posts/{post_id}")
-def get_post(post_id: int) -> PostResponse:
-    # 경로의 {post_id}와 이름이 같은 인자가 경로 변수가 된다 (@PathVariable)
-    return _find_or_404(post_id)
+@app.get("/posts/{post_id}", response_model=PostResponse)
+def get_post(post_id: int, db: DbSession) -> Post:
+    return _find_or_404(db, post_id)
 
 
-@app.patch("/posts/{post_id}")
-def update_post(post_id: int, payload: PostUpdate) -> PostResponse:
-    post = _find_or_404(post_id)
-    # exclude_unset=True: 클라이언트가 '실제로 보낸' 필드만 꺼낸다
-    changes = payload.model_dump(exclude_unset=True)
-    updated = post.model_copy(update={**changes, "updated_at": datetime.now(UTC)})
-    _posts[post_id] = updated
-    return updated
+@app.patch("/posts/{post_id}", response_model=PostResponse)
+def update_post(post_id: int, payload: PostUpdate, db: DbSession) -> Post:
+    post = _find_or_404(db, post_id)
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(post, field, value)  # post.title = value 와 같다 (더티 체킹 대상이 됨)
+    db.commit()
+    db.refresh(post)
+    return post
 
 
 @app.delete("/posts/{post_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_post(post_id: int) -> None:
-    _find_or_404(post_id)
-    del _posts[post_id]
+def delete_post(post_id: int, db: DbSession) -> None:
+    post = _find_or_404(db, post_id)
+    db.delete(post)
+    db.commit()

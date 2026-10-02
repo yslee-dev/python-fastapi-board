@@ -1,15 +1,39 @@
+import os
+from collections.abc import Iterator
+
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
-from app import main
+from app.database import Base, get_db
+from app.main import app
+
+TEST_DATABASE_URL = os.getenv(
+    "TEST_DATABASE_URL", "postgresql+psycopg://board:board@localhost:5433/board_test"
+)
+test_engine = create_engine(TEST_DATABASE_URL)
+TestingSessionLocal = sessionmaker(bind=test_engine, autoflush=False, expire_on_commit=False)
 
 
 @pytest.fixture
-def client() -> TestClient:
-    # 메모리 저장소를 테스트마다 비운다
-    main._posts.clear()
-    main._next_id = 1
-    return TestClient(main.app)
+def client() -> Iterator[TestClient]:
+    # 04단계의 단순한 방식: 테스트마다 테이블을 만들고 지운다 (06단계에서 개선)
+    Base.metadata.create_all(test_engine)
+
+    def override_get_db():
+        db = TestingSessionLocal()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    # get_db 대신 테스트 DB 세션을 주입한다 (@MockBean / @TestConfiguration 역할)
+    app.dependency_overrides[get_db] = override_get_db
+    with TestClient(app) as test_client:
+        yield test_client
+    app.dependency_overrides.clear()
+    Base.metadata.drop_all(test_engine)
 
 
 def create_post(client: TestClient, **overrides: str) -> dict:

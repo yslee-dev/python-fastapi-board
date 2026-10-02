@@ -29,3 +29,12 @@ uv run ruff check .      # 린트
 uv run ruff format .     # 포맷
 uv run fastapi dev app/main.py   # 개발 서버 (자동 재시작) → http://localhost:8000/docs
 ```
+
+## DB (04단계부터)
+
+```bash
+docker compose up -d --wait      # PostgreSQL 16 (localhost:5433)
+uv run alembic upgrade head      # 마이그레이션 적용 (= flyway migrate)
+docker compose down              # 중지 (데이터 유지)
+docker compose down -v           # 중지 + 데이터 삭제
+```
